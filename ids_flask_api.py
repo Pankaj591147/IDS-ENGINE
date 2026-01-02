@@ -431,7 +431,7 @@ def dashboard():
             }
 
             async function simulateAttack() {
-                // This injects a malicious SQL packet
+                // 1. Send the malicious packet
                 const response = await fetch('/api/packets/analyze', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -439,13 +439,23 @@ def dashboard():
                         layers: {
                             ip: {src: '192.168.1.50', dst: '10.0.0.1'},
                             tcp: {src_port: 4444, dst_port: 80},
-                            payload: "UNION SELECT * FROM users"
+                            payload: "UNION SELECT * FROM users" // The attack
                         }
                     })
                 });
+                
                 const data = await response.json();
-                alert("⚠️ ATTACK INJECTED!\\n\\nEngine Response: " + data.signature_alerts[0].rule_name);
-                refreshStatus();
+                
+                // 2. Show the alert popup
+                if (data.signature_alerts && data.signature_alerts.length > 0) {
+                     alert("⚠️ ATTACK SUCCESSFUL!\n\nEngine detected: " + data.signature_alerts[0].rule_name);
+                } else {
+                     alert("⚠️ Attack Sent (No detection trigger - check logs)");
+                }
+
+                // 3. FORCE A REFRESH of the counters immediately
+                await refreshStatus(); 
+            }
             }
             
             // Auto-refresh every 2 seconds
