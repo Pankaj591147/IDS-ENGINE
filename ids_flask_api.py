@@ -87,28 +87,37 @@ def clear_alerts():
 
 @app.route('/api/packets/analyze', methods=['POST'])
 def analyze_packet():
-    """Analyze single packet data"""
+    """Analyze single packet data AND update global counters"""
     packet_data = request.json
     
     if not packet_data:
         return jsonify({'success': False, 'message': 'No packet data'}), 400
     
-    # === FIX: Convert Web Text to Engine Bytes ===
-    # We create a copy so we don't mess up the JSON response
+    # 1. Prepare data (fix bytes/string issue)
     engine_data = packet_data.copy()
     engine_data['layers'] = packet_data.get('layers', {}).copy()
-    
-    # If payload is a string (from web), convert to bytes (for engine)
     payload = engine_data['layers'].get('payload', '')
     if isinstance(payload, str):
         engine_data['layers']['payload'] = payload.encode('utf-8')
     
-    # Run detections
+    # 2. Run detections
     signature_alerts = signature_engine.detect(engine_data)
     anomaly_result = anomaly_engine.detect(engine_data)
     
-    # === FIX: Clean up alerts for JSON (Bytes -> String) ===
-    # JSON cannot send raw bytes, so we convert back to string
+    # 3. === CRITICAL FIX: Update the Global Scoreboard ===
+    if signature_alerts:
+        # Increment the counter
+        ids_state['threats_detected'] += len(signature_alerts)
+        
+        # Add to the alerts list so it shows in the table
+        for alert in signature_alerts:
+            alert['id'] = f"sim_{ids_state['threats_detected']}" # Unique ID
+            ids_state['alerts'].insert(0, alert) # Add to top of list
+            
+    if anomaly_result.get('is_anomaly'):
+        ids_state['anomalies_detected'] += 1
+
+    # 4. Clean up for JSON response
     for alert in signature_alerts:
         if isinstance(alert.get('payload_sample'), bytes):
             alert['payload_sample'] = alert['payload_sample'].decode('utf-8', errors='ignore')
